@@ -77,6 +77,26 @@ class HandTracker:
             self.connection_drawing_spec,
         )
 
+    def get_landmark_point(self, hand_landmarks, landmark_index, width, height):
+        if not self.available:
+            return None
+
+        landmark = hand_landmarks.landmark[landmark_index]
+        x = int(landmark.x * width)
+        y = int(landmark.y * height)
+        return (x, y)
+
+    def get_index_finger_tip(self, hand_landmarks, width, height):
+        if not self.available or self.mp_hands is None:
+            return None
+
+        return self.get_landmark_point(
+            hand_landmarks,
+            self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+            width,
+            height,
+        )
+
     def get_handedness_label(self, results, hand_index=0):
         if results is None or not results.multi_handedness:
             return None
