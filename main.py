@@ -34,6 +34,7 @@ def main():
     mouse = MouseController()
     smoother = PointSmoother(SMOOTHING_POINTS)
     pinch_gesture_active = False
+    right_click_gesture_active = False
     pinch_started_at = None
     drag_active = False
 
@@ -72,17 +73,22 @@ def main():
             status_text = tracker.error or mouse.error or "Show your hand to the camera"
             index_point = None
             thumb_point = None
+            middle_point = None
             smoothed_index_point = None
             screen_point = None
             pinch_ratio = None
+            right_click_ratio = None
             pinch_duration = None
             if tracker.available and results and results.multi_hand_landmarks:
                 hand_landmarks = results.multi_hand_landmarks[0]
                 tracker.draw_landmarks(frame, hand_landmarks)
                 index_point = tracker.get_index_finger_tip(hand_landmarks, frame_width, frame_height)
                 thumb_point = tracker.get_thumb_tip(hand_landmarks, frame_width, frame_height)
+                middle_point = tracker.get_middle_finger_tip(hand_landmarks, frame_width, frame_height)
                 pinch_ratio = tracker.get_pinch_distance_ratio(hand_landmarks)
+                right_click_ratio = tracker.get_right_click_distance_ratio(hand_landmarks)
                 is_left_click_gesture = tracker.is_left_click_gesture(hand_landmarks)
+                is_right_click_gesture = tracker.is_right_click_gesture(hand_landmarks)
 
                 if index_point is not None:
                     cv2.circle(frame, index_point, CONTROL_POINT_RADIUS, CONTROL_POINT_COLOR, -1)
@@ -110,6 +116,10 @@ def main():
 
                 if thumb_point is not None and index_point is not None:
                     cv2.line(frame, thumb_point, index_point, CONTROL_POINT_COLOR, 2)
+                if middle_point is not None:
+                    cv2.circle(frame, middle_point, CONTROL_POINT_RADIUS, STATUS_TEXT_COLOR, 2)
+                if thumb_point is not None and middle_point is not None:
+                    cv2.line(frame, thumb_point, middle_point, STATUS_TEXT_COLOR, 2)
 
                 current_time = time.monotonic()
                 if is_left_click_gesture:
@@ -133,11 +143,19 @@ def main():
                     pinch_gesture_active = False
                     pinch_started_at = None
                     drag_active = False
+                elif is_right_click_gesture and not right_click_gesture_active and not pinch_gesture_active:
+                    if mouse.available:
+                        mouse.right_click()
+                        status_text = "Right click"
+
+                right_click_gesture_active = is_right_click_gesture
 
                 if drag_active:
                     status_text = "Dragging"
                 elif pinch_gesture_active and pinch_duration is not None:
                     status_text = f"Pinch hold: {pinch_duration:.2f}s"
+                elif right_click_gesture_active:
+                    status_text = "Right click gesture"
                 elif screen_point is not None:
                     status_text = f"Cursor: {screen_point[0]}, {screen_point[1]} (smoothed)"
                 elif index_point is not None:
@@ -148,6 +166,7 @@ def main():
                 smoother.reset()
                 tracker.reset()
                 pinch_gesture_active = False
+                right_click_gesture_active = False
                 pinch_started_at = None
                 if drag_active and mouse.available:
                     mouse.left_up()
@@ -196,6 +215,16 @@ def main():
                     frame,
                     f"Pinch ratio: {pinch_ratio:.2f}",
                     (20, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    STATUS_TEXT_COLOR,
+                    2,
+                )
+            if right_click_ratio is not None:
+                cv2.putText(
+                    frame,
+                    f"Right pinch ratio: {right_click_ratio:.2f}",
+                    (20, 320),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
                     STATUS_TEXT_COLOR,

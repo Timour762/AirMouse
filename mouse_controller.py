@@ -4,6 +4,8 @@ import ctypes
 class MouseController:
     MOUSEEVENTF_LEFTDOWN = 0x0002
     MOUSEEVENTF_LEFTUP = 0x0004
+    MOUSEEVENTF_RIGHTDOWN = 0x0008
+    MOUSEEVENTF_RIGHTUP = 0x0010
 
     def __init__(self):
         self.available = False
@@ -45,6 +47,14 @@ class MouseController:
 
         self.user32.mouse_event(self.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
         self.user32.mouse_event(self.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        return True
+
+    def right_click(self):
+        if not self.available or self.user32 is None:
+            return False
+
+        self.user32.mouse_event(self.MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
+        self.user32.mouse_event(self.MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
         return True
 
     def left_down(self):
