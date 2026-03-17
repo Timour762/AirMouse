@@ -10,6 +10,7 @@ class MouseController:
         self.error = None
         self.user32 = None
         self.screen_size = (0, 0)
+        self.left_button_pressed = False
 
         try:
             self.user32 = ctypes.windll.user32
@@ -44,4 +45,20 @@ class MouseController:
 
         self.user32.mouse_event(self.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
         self.user32.mouse_event(self.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        return True
+
+    def left_down(self):
+        if not self.available or self.user32 is None or self.left_button_pressed:
+            return False
+
+        self.user32.mouse_event(self.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        self.left_button_pressed = True
+        return True
+
+    def left_up(self):
+        if not self.available or self.user32 is None or not self.left_button_pressed:
+            return False
+
+        self.user32.mouse_event(self.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        self.left_button_pressed = False
         return True

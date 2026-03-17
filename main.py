@@ -1,3 +1,5 @@
+import time
+
 import cv2
 
 from config import (
@@ -6,6 +8,7 @@ from config import (
     CAMERA_WIDTH,
     CONTROL_POINT_COLOR,
     CONTROL_POINT_RADIUS,
+    DRAG_HOLD_SECONDS,
     SMOOTHING_POINTS,
     STATUS_TEXT_COLOR,
     WINDOW_NAME,
@@ -30,7 +33,9 @@ def main():
     tracker = HandTracker()
     mouse = MouseController()
     smoother = PointSmoother(SMOOTHING_POINTS)
-    left_click_gesture_active = False
+    pinch_gesture_active = False
+    pinch_started_at = None
+    drag_active = False
 
     if not cap.isOpened():
         raise RuntimeError("Camera is not opening. Check CAMERA_INDEX and camera permissions.")
@@ -70,6 +75,7 @@ def main():
             smoothed_index_point = None
             screen_point = None
             pinch_ratio = None
+            pinch_duration = None
             if tracker.available and results and results.multi_hand_landmarks:
                 hand_landmarks = results.multi_hand_landmarks[0]
                 tracker.draw_landmarks(frame, hand_landmarks)
@@ -105,21 +111,47 @@ def main():
                 if thumb_point is not None and index_point is not None:
                     cv2.line(frame, thumb_point, index_point, CONTROL_POINT_COLOR, 2)
 
-                if is_left_click_gesture and not left_click_gesture_active and mouse.available:
-                    mouse.left_click()
-                    status_text = "Left click"
+                current_time = time.monotonic()
+                if is_left_click_gesture:
+                    if not pinch_gesture_active:
+                        pinch_gesture_active = True
+                        pinch_started_at = current_time
+                    pinch_duration = current_time - pinch_started_at if pinch_started_at is not None else 0.0
+
+                    if not drag_active and pinch_duration >= DRAG_HOLD_SECONDS and mouse.available:
+                        mouse.left_down()
+                        drag_active = True
+
+                elif pinch_gesture_active:
+                    if drag_active and mouse.available:
+                        mouse.left_up()
+                        status_text = "Drag released"
+                    elif mouse.available:
+                        mouse.left_click()
+                        status_text = "Left click"
+
+                    pinch_gesture_active = False
+                    pinch_started_at = None
+                    drag_active = False
+
+                if drag_active:
+                    status_text = "Dragging"
+                elif pinch_gesture_active and pinch_duration is not None:
+                    status_text = f"Pinch hold: {pinch_duration:.2f}s"
                 elif screen_point is not None:
                     status_text = f"Cursor: {screen_point[0]}, {screen_point[1]} (smoothed)"
                 elif index_point is not None:
                     status_text = f"Index tip: {index_point[0]}, {index_point[1]}"
                 else:
                     status_text = "Hand detected"
-
-                left_click_gesture_active = is_left_click_gesture
             else:
                 smoother.reset()
                 tracker.reset()
-                left_click_gesture_active = False
+                pinch_gesture_active = False
+                pinch_started_at = None
+                if drag_active and mouse.available:
+                    mouse.left_up()
+                drag_active = False
 
             cv2.putText(
                 frame,
@@ -169,12 +201,24 @@ def main():
                     STATUS_TEXT_COLOR,
                     2,
                 )
+            if pinch_duration is not None:
+                cv2.putText(
+                    frame,
+                    f"Pinch hold: {pinch_duration:.2f}s / {DRAG_HOLD_SECONDS:.2f}s",
+                    (20, 280),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    STATUS_TEXT_COLOR,
+                    2,
+                )
             cv2.imshow(WINDOW_NAME, frame)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
                 break
     finally:
+        if drag_active and mouse.available:
+            mouse.left_up()
         tracker.close()
         cap.release()
         cv2.destroyAllWindows()
