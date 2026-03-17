@@ -2,6 +2,9 @@ import ctypes
 
 
 class MouseController:
+    MOUSEEVENTF_LEFTDOWN = 0x0002
+    MOUSEEVENTF_LEFTUP = 0x0004
+
     def __init__(self):
         self.available = False
         self.error = None
@@ -33,4 +36,12 @@ class MouseController:
         clamped_x = max(0, min(int(x), self.screen_size[0] - 1))
         clamped_y = max(0, min(int(y), self.screen_size[1] - 1))
         self.user32.SetCursorPos(clamped_x, clamped_y)
+        return True
+
+    def left_click(self):
+        if not self.available or self.user32 is None:
+            return False
+
+        self.user32.mouse_event(self.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        self.user32.mouse_event(self.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
         return True

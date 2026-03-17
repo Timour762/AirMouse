@@ -30,6 +30,7 @@ def main():
     tracker = HandTracker()
     mouse = MouseController()
     smoother = PointSmoother(SMOOTHING_POINTS)
+    left_click_gesture_active = False
 
     if not cap.isOpened():
         raise RuntimeError("Camera is not opening. Check CAMERA_INDEX and camera permissions.")
@@ -65,12 +66,17 @@ def main():
 
             status_text = tracker.error or mouse.error or "Show your hand to the camera"
             index_point = None
+            thumb_point = None
             smoothed_index_point = None
             screen_point = None
+            pinch_ratio = None
             if tracker.available and results and results.multi_hand_landmarks:
                 hand_landmarks = results.multi_hand_landmarks[0]
                 tracker.draw_landmarks(frame, hand_landmarks)
                 index_point = tracker.get_index_finger_tip(hand_landmarks, frame_width, frame_height)
+                thumb_point = tracker.get_thumb_tip(hand_landmarks, frame_width, frame_height)
+                pinch_ratio = tracker.get_pinch_distance_ratio(hand_landmarks)
+                is_left_click_gesture = tracker.is_left_click_gesture(hand_landmarks)
 
                 if index_point is not None:
                     cv2.circle(frame, index_point, CONTROL_POINT_RADIUS, CONTROL_POINT_COLOR, -1)
@@ -93,14 +99,27 @@ def main():
                         2,
                     )
 
-                if screen_point is not None:
+                if thumb_point is not None:
+                    cv2.circle(frame, thumb_point, CONTROL_POINT_RADIUS, CONTROL_POINT_COLOR, 2)
+
+                if thumb_point is not None and index_point is not None:
+                    cv2.line(frame, thumb_point, index_point, CONTROL_POINT_COLOR, 2)
+
+                if is_left_click_gesture and not left_click_gesture_active and mouse.available:
+                    mouse.left_click()
+                    status_text = "Left click"
+                elif screen_point is not None:
                     status_text = f"Cursor: {screen_point[0]}, {screen_point[1]} (smoothed)"
                 elif index_point is not None:
                     status_text = f"Index tip: {index_point[0]}, {index_point[1]}"
                 else:
                     status_text = "Hand detected"
+
+                left_click_gesture_active = is_left_click_gesture
             else:
                 smoother.reset()
+                tracker.reset()
+                left_click_gesture_active = False
 
             cv2.putText(
                 frame,
@@ -135,6 +154,16 @@ def main():
                     frame,
                     f"Smoothed: {smoothed_index_point[0]}, {smoothed_index_point[1]}",
                     (20, 200),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    STATUS_TEXT_COLOR,
+                    2,
+                )
+            if pinch_ratio is not None:
+                cv2.putText(
+                    frame,
+                    f"Pinch ratio: {pinch_ratio:.2f}",
+                    (20, 240),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
                     STATUS_TEXT_COLOR,
