@@ -6,12 +6,14 @@ from config import (
     CAMERA_WIDTH,
     CONTROL_POINT_COLOR,
     CONTROL_POINT_RADIUS,
+    SMOOTHING_POINTS,
     STATUS_TEXT_COLOR,
     WINDOW_NAME,
 )
 from hand_tracker import HandTracker
 from mouse_controller import MouseController
 from mouse_mapper import MouseMapper
+from point_smoother import PointSmoother
 
 
 def open_camera():
@@ -27,6 +29,7 @@ def main():
     cap = open_camera()
     tracker = HandTracker()
     mouse = MouseController()
+    smoother = PointSmoother(SMOOTHING_POINTS)
 
     if not cap.isOpened():
         raise RuntimeError("Camera is not opening. Check CAMERA_INDEX and camera permissions.")
@@ -62,6 +65,7 @@ def main():
 
             status_text = tracker.error or mouse.error or "Show your hand to the camera"
             index_point = None
+            smoothed_index_point = None
             screen_point = None
             if tracker.available and results and results.multi_hand_landmarks:
                 hand_landmarks = results.multi_hand_landmarks[0]
@@ -70,8 +74,11 @@ def main():
 
                 if index_point is not None:
                     cv2.circle(frame, index_point, CONTROL_POINT_RADIUS, CONTROL_POINT_COLOR, -1)
+                    smoothed_index_point = smoother.smooth(index_point)
+                    if smoothed_index_point is not None:
+                        cv2.circle(frame, smoothed_index_point, CONTROL_POINT_RADIUS + 4, STATUS_TEXT_COLOR, 2)
                     if mouse.available and mouse_mapper is not None:
-                        screen_point = mouse_mapper.map_point(index_point)
+                        screen_point = mouse_mapper.map_point(smoothed_index_point or index_point)
                         mouse.move_to(screen_point[0], screen_point[1])
 
                 handedness = tracker.get_handedness_label(results, 0)
@@ -87,11 +94,13 @@ def main():
                     )
 
                 if screen_point is not None:
-                    status_text = f"Cursor: {screen_point[0]}, {screen_point[1]}"
+                    status_text = f"Cursor: {screen_point[0]}, {screen_point[1]} (smoothed)"
                 elif index_point is not None:
                     status_text = f"Index tip: {index_point[0]}, {index_point[1]}"
                 else:
                     status_text = "Hand detected"
+            else:
+                smoother.reset()
 
             cv2.putText(
                 frame,
@@ -116,6 +125,16 @@ def main():
                     frame,
                     f"Finger: {index_point[0]}, {index_point[1]}",
                     (20, 160),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    STATUS_TEXT_COLOR,
+                    2,
+                )
+            if smoothed_index_point is not None:
+                cv2.putText(
+                    frame,
+                    f"Smoothed: {smoothed_index_point[0]}, {smoothed_index_point[1]}",
+                    (20, 200),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7,
                     STATUS_TEXT_COLOR,
