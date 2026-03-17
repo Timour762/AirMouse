@@ -6,6 +6,8 @@ class MouseController:
     MOUSEEVENTF_LEFTUP = 0x0004
     MOUSEEVENTF_RIGHTDOWN = 0x0008
     MOUSEEVENTF_RIGHTUP = 0x0010
+    MOUSEEVENTF_WHEEL = 0x0800
+    WHEEL_DELTA = 120
 
     def __init__(self):
         self.available = False
@@ -55,6 +57,13 @@ class MouseController:
 
         self.user32.mouse_event(self.MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
         self.user32.mouse_event(self.MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+        return True
+
+    def scroll_vertical(self, steps):
+        if not self.available or self.user32 is None or int(steps) == 0:
+            return False
+
+        self.user32.mouse_event(self.MOUSEEVENTF_WHEEL, 0, 0, int(steps) * self.WHEEL_DELTA, 0)
         return True
 
     def left_down(self):

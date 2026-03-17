@@ -8,6 +8,7 @@ except ImportError:
     mp = None
 
 from config import (
+    FINGER_Y_MARGIN,
     HAND_CONNECTION_COLOR,
     HAND_DRAW_RADIUS,
     HAND_DRAW_THICKNESS,
@@ -18,6 +19,7 @@ from config import (
     PINCH_DISTANCE_RATIO,
     PINCH_SMOOTHING_FRAMES,
     RIGHT_CLICK_DISTANCE_RATIO,
+    SCROLL_GESTURE_SMOOTHING_FRAMES,
 )
 
 
@@ -32,6 +34,7 @@ class HandTracker:
         self.connection_drawing_spec = None
         self.left_click_gesture_history = deque(maxlen=PINCH_SMOOTHING_FRAMES)
         self.right_click_gesture_history = deque(maxlen=PINCH_SMOOTHING_FRAMES)
+        self.scroll_gesture_history = deque(maxlen=SCROLL_GESTURE_SMOOTHING_FRAMES)
 
         if mp is None:
             self.error = "MediaPipe is not installed."
@@ -146,6 +149,17 @@ class HandTracker:
             self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
         )
 
+    def get_scroll_control_point(self, hand_landmarks, width, height):
+        index_point = self.get_index_finger_tip(hand_landmarks, width, height)
+        middle_point = self.get_middle_finger_tip(hand_landmarks, width, height)
+        if index_point is None or middle_point is None:
+            return None
+
+        return (
+            int((index_point[0] + middle_point[0]) / 2),
+            int((index_point[1] + middle_point[1]) / 2),
+        )
+
     def get_landmark_distance_ratio(self, hand_landmarks, first_landmark_index, second_landmark_index):
         if not self.available or self.mp_hands is None:
             return None
@@ -184,6 +198,44 @@ class HandTracker:
         required_votes = max(1, len(self.right_click_gesture_history) // 2 + 1)
         return sum(self.right_click_gesture_history) >= required_votes
 
+    def is_scroll_gesture(self, hand_landmarks):
+        if not self.available or self.mp_hands is None:
+            return False
+
+        hand_landmark = self.mp_hands.HandLandmark
+        left_click_ratio = self.get_pinch_distance_ratio(hand_landmarks)
+        right_click_ratio = self.get_right_click_distance_ratio(hand_landmarks)
+        if left_click_ratio is None or right_click_ratio is None:
+            return False
+
+        raw_gesture = (
+            self._is_finger_extended(
+                hand_landmarks,
+                hand_landmark.INDEX_FINGER_TIP,
+                hand_landmark.INDEX_FINGER_PIP,
+            )
+            and self._is_finger_extended(
+                hand_landmarks,
+                hand_landmark.MIDDLE_FINGER_TIP,
+                hand_landmark.MIDDLE_FINGER_PIP,
+            )
+            and self._is_finger_folded(
+                hand_landmarks,
+                hand_landmark.RING_FINGER_TIP,
+                hand_landmark.RING_FINGER_PIP,
+            )
+            and self._is_finger_folded(
+                hand_landmarks,
+                hand_landmark.PINKY_TIP,
+                hand_landmark.PINKY_PIP,
+            )
+            and left_click_ratio >= PINCH_DISTANCE_RATIO
+            and right_click_ratio >= RIGHT_CLICK_DISTANCE_RATIO
+        )
+        self.scroll_gesture_history.append(raw_gesture)
+        required_votes = max(1, len(self.scroll_gesture_history) // 2 + 1)
+        return sum(self.scroll_gesture_history) >= required_votes
+
     def get_handedness_label(self, results, hand_index=0):
         if results is None or not results.multi_handedness:
             return None
@@ -200,6 +252,17 @@ class HandTracker:
     def reset(self):
         self.left_click_gesture_history.clear()
         self.right_click_gesture_history.clear()
+        self.scroll_gesture_history.clear()
+
+    def _is_finger_extended(self, hand_landmarks, tip_index, pip_index):
+        tip = hand_landmarks.landmark[tip_index]
+        pip = hand_landmarks.landmark[pip_index]
+        return tip.y < pip.y - FINGER_Y_MARGIN
+
+    def _is_finger_folded(self, hand_landmarks, tip_index, pip_index):
+        tip = hand_landmarks.landmark[tip_index]
+        pip = hand_landmarks.landmark[pip_index]
+        return tip.y > pip.y + FINGER_Y_MARGIN
 
     def _distance(self, first_landmark, second_landmark):
         return (
